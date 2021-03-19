@@ -43,7 +43,7 @@ We can then call these functions using the file path of this config.
 The data will now be in a Pandas DataFrame format. You can additionally query
 and save as a Parquet file named gaia_data.parquet.gzip using:
 
-    gaia_query_to_parquet(query, 'gaia_data', login_cnf=r'C:\configs\login_config.ini')
+    da.gaia_query_to_parquet(query, 'gaia_data', login_cnf=r'C:\configs\login_config.ini')
     
 Again, here you can leave login_cnf empty and enter login details in the terminal.
 
