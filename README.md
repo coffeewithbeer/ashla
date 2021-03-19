@@ -17,9 +17,21 @@ Firstly, clone the repository onto your local machine. Say the clone lives in
 Get data from gaia as a Pandas DataFrame:
 
     import ashla.data_access as da
+    
+    query = r"""SELECT TOP 500 gaia_source.source_id,gaia_source.ra,gaia_source.ra_error,gaia_source.dec,
+                gaia_source.dec_error,gaia_source.parallax,gaia_source.parallax_error,gaia_source.phot_g_mean_mag,
+                gaia_source.bp_rp,gaia_source.radial_velocity,gaia_source.radial_velocity_error,
+                gaia_source.phot_variable_flag,gaia_source.teff_val,gaia_source.a_g_val
+            FROM gaiadr2.gaia_source 
+            WHERE (gaiadr2.gaia_source.source_id=4722135642226356736 OR 
+                gaiadr2.gaia_source.source_id=4722111590409480064)"""
 
     data = da.query_gaia_to_pandas(query, login_conf=None)
-    
+
+Where the above query gets some basic information about the first 
+Binary system stars
+
+
 For logging in, you can use the ESA login and password. Either 
 don't supply a login_conf object and you will be promted to enter 
 a login and password in the terminal. Else make a copy of the ashla/data_access/login_config.ini 
