@@ -26,7 +26,7 @@ Get data from gaia as a Pandas DataFrame:
             WHERE (gaiadr2.gaia_source.source_id=4722135642226356736 OR 
                 gaiadr2.gaia_source.source_id=4722111590409480064)"""
 
-    data = da.query_gaia_to_pandas(query, login_conf=None)
+    data = da.query_gaia_to_pandas(query, login_cnf=None)
 
 Where the above query gets some basic information about the first 
 Binary system stars
