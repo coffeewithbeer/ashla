@@ -4,6 +4,12 @@ Package to deal with Wide Binary stuff.
 
 # Installation #
 
+Firstly, clone the repository onto your local machine. Say the clone lives in
+ C:/git/ashla
+ 
+    cd C:/git/ashla
+    pip install .
+
 # Usage #
 
 #### ashla.data_access (Gaia Access)
