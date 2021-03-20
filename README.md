@@ -21,12 +21,14 @@ Get data from gaia as a Pandas DataFrame:
     query = r"""SELECT TOP 500 gaia_source.source_id,gaia_source.ra,gaia_source.ra_error,gaia_source.dec,
                 gaia_source.dec_error,gaia_source.parallax,gaia_source.parallax_error,gaia_source.phot_g_mean_mag,
                 gaia_source.bp_rp,gaia_source.radial_velocity,gaia_source.radial_velocity_error,
-                gaia_source.phot_variable_flag,gaia_source.teff_val,gaia_source.a_g_val
+                gaia_source.phot_variable_flag,gaia_source.teff_val,gaia_source.a_g_val,
+                gaia_source.pmra as proper_motion_ra, gaia_source.pmra_error as proper_motion_ra_error, 
+                gaia_source.pmdec as proper_motion_dec, gaia_source.pmdec_error as proper_motion_dec_error
             FROM gaiadr2.gaia_source 
             WHERE (gaiadr2.gaia_source.source_id=4722135642226356736 OR 
                 gaiadr2.gaia_source.source_id=4722111590409480064)"""
-
-    data = da.query_gaia_to_pandas(query, login_cnf=None)
+    gaia_cnxn = da.GaiaDataAccess(login_cnf)
+    data = gaia_cnxn.gaia_query_to_pandas(query)
 
 Where the above query gets some basic information about the first 
 Binary system stars
@@ -48,16 +50,20 @@ For example:
     
 This is all the inputs we need. 
 
-We can then call these functions using the file path of this config.
+We can then create a Gaia Connection object using the file path of this config. 
+This will allow you to run Gaia Queries.
 
-    data = da.query_gaia_to_pandas(query, r'C:\configs\login_config.ini')
+    gaia_cnxn = da.GaiaDataAccess(r'C:\configs\login_config.ini')
+    
+You can use this connection object to run a query and get a pandas DataFrame output.
+    
+    data = gaia_cnxn.query_gaia_to_pandas(query)
 
 The data will now be in a Pandas DataFrame format. You can additionally query
-and save as a Parquet file named gaia_data.parquet.gzip using:
+and save as a Parquet file named gaia_data.parquet.gzip using the parquet_output_name option:
 
-    da.gaia_query_to_parquet(query, 'gaia_data', login_cnf=r'C:\configs\login_config.ini')
+    data = gaia_cnxn.query_gaia_to_pandas(query, parquet_output_name='gaia_data')
     
-Again, here you can leave login_cnf empty and enter login details in the terminal.
 
 
     

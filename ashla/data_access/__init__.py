@@ -1,6 +1,56 @@
-from astroquery.gaia import Gaia
+from astroquery.gaia import Gaia, GaiaClass
 from ashla import utils
 import ashla.data_access.config as cnf
+
+
+class GaiaDataAccess(GaiaClass):
+    def __init__(self, login_config=None):
+        super(GaiaDataAccess, self).__init__()
+        self.login_config = login_config
+        if self.login_config is None:
+            # You can type in your details
+            self.login()
+        else:
+            login_conf_inst = cnf.GaiaLoginConf(config_file=self.login_config)
+            self.login(user=login_conf_inst.user, password=login_conf_inst.password)
+
+    def get_gaia_job(self, query, asyncronous=True, **kwargs):
+        if asyncronous:
+            j1 = self.launch_job_async(query, **kwargs)
+        else:
+            j1 = self.launch_job(query, **kwargs)
+        job = j1.get_results()
+        return job
+
+    def gaia_query_to_pandas(self, query, parquet_output_name=None):
+        job = self.get_gaia_job(query)
+        gaia_data = job.to_pandas()
+        if parquet_output_name is not None:
+            self.data_save_parquet(gaia_data, output_file_name=parquet_output_name)
+        return gaia_data
+
+    def data_save_parquet(self, data, output_file_name):
+        data.to_parquet("{0}.parquet.gzip".format(output_file_name), compression='gzip')
+
+    def gaia_query_save_parquet_file(self, query, output_file_name):
+        gaia_data = query_gaia_to_pandas(query)
+        self.data_save_parquet(gaia_data, output_file_name)
+
+    def gaia_get_dr2_initial_data(self, save_to_parquet=False):
+        query = r"""SELECT TOP 500 gaia_source.source_id,gaia_source.ra,gaia_source.ra_error,gaia_source.dec,
+                        gaia_source.dec_error,gaia_source.parallax,gaia_source.parallax_error,gaia_source.phot_g_mean_mag,
+                        gaia_source.bp_rp,gaia_source.radial_velocity,gaia_source.radial_velocity_error,
+                        gaia_source.phot_variable_flag,gaia_source.teff_val,gaia_source.a_g_val, 
+                        gaia_source.pmra as proper_motion_ra, gaia_source.pmra_error as proper_motion_ra_error, 
+                        gaia_source.pmdec as proper_motion_dec, gaia_source.pmdec_error as proper_motion_dec_error
+                    FROM gaiadr2.gaia_source 
+                    WHERE (gaiadr2.gaia_source.source_id=4722135642226356736 OR 
+                        gaiadr2.gaia_source.source_id=4722111590409480064)"""
+
+        output_df = self.gaia_query_to_pandas(query)
+        if save_to_parquet:
+            self.data_save_parquet(output_df, "initial_dr2_data")
+        return output_df
 
 
 def query_random_selection(num_results):
@@ -28,14 +78,8 @@ def query_random_selection(num_results):
 
 
 def run_gaia_query(query, login_config=None):
-    if login_config is None:
-        # You can type in your details
-        Gaia.login()
-    else:
-        login_conf_inst = cnf.GaiaLoginConf(config_file=login_config)
-        Gaia.login(user=login_conf_inst.user, password=login_conf_inst.password)
-    j1 = Gaia.launch_job(query)
-    job = j1.get_results()
+    gaia_cls = GaiaDataAccess(login_config=login_config)
+    job = gaia_cls.get_gaia_job(query)
     return job
 
 
@@ -49,14 +93,6 @@ def add_calculated_cols(gaia_df):
     return gaia_df
 
 
-def get_data(num_results=50000, login_cnf=None):
-    job = run_gaia_query(query_random_selection(num_results), login_cnf)
-    gaia_data = job.to_pandas()
-    data_to_parquery(num_results, gaia_data)
-    gaia_data = add_calculated_cols(gaia_data)
-    return gaia_data
-
-
 def query_gaia_to_pandas(query, login_cnf=None):
     job = run_gaia_query(query, login_cnf)
     gaia_data = job.to_pandas()
@@ -66,9 +102,3 @@ def query_gaia_to_pandas(query, login_cnf=None):
 def gaia_query_to_parquet(query, output_file_name, login_cnf=None):
     gaia_data = query_gaia_to_pandas(query, login_cnf=login_cnf)
     gaia_data.to_parquet("{0}.parquet.gzip".format(output_file_name), compression='gzip')
-
-
-def data_to_parquery(num_stars, data=None):
-    output_path = "gaia_data_{0}_results.parquet.gzip".format(num_stars)
-    data.to_parquet(output_path, compression='gzip')
-    return data, output_path
