@@ -130,21 +130,26 @@ class GaiaDataAccess(GaiaClass):
                         gaia_source.phot_variable_flag,gaia_source.teff_val,gaia_source.a_g_val, 
                         gaia_source.pmra as proper_motion_ra, gaia_source.pmra_error as proper_motion_ra_error, 
                         gaia_source.pmdec as proper_motion_dec, gaia_source.pmdec_error as proper_motion_dec_error,
-						hipp.ccdm, hipp.n_ccdm AS CCDM_History, hipparcos2_best_neighbour.angular_distance AS angular_distance_between_hipp_gaia,
+						hipp.ccdm, hipp.n_ccdm AS CCDM_History, 
+						hipparcos2_best_neighbour.angular_distance AS angular_distance_between_hipp_gaia,
 						num_binary.num_ccdm AS num_stars_in_binary_w_data_available
 
                     FROM gaiadr2.gaia_source
-LEFT JOIN gaiadr2.hipparcos2_best_neighbour ON gaia_source.source_id = hipparcos2_best_neighbour.source_id
-LEFT JOIN public.hipparcos_newreduction AS hipp2 ON hipp2.hip = hipparcos2_best_neighbour.original_ext_source_id
-LEFT JOIN public.hipparcos AS hipp ON hipp2.hip = hipp.hip
-INNER JOIN (SELECT hipp.ccdm, count(*) AS num_ccdm FROM public.hipparcos AS hipp 
-			INNER JOIN gaiadr2.hipparcos2_best_neighbour ON hipp.hip = hipparcos2_best_neighbour.original_ext_source_id 
-			GROUP BY hipp.ccdm {0}
-		   ) AS num_binary ON num_binary.ccdm = hipp.ccdm
-
-WHERE hipp.ccdm is not null
-
-ORDER BY hipp.ccdm asc""".format(filter_missing_data)
+                        LEFT JOIN gaiadr2.hipparcos2_best_neighbour 
+                            ON gaia_source.source_id = hipparcos2_best_neighbour.source_id
+                            LEFT JOIN public.hipparcos_newreduction AS hipp2 
+                                ON hipp2.hip = hipparcos2_best_neighbour.original_ext_source_id
+                                LEFT JOIN public.hipparcos AS hipp ON hipp2.hip = hipp.hip
+                                    INNER JOIN (SELECT hipp.ccdm, count(*) AS num_ccdm 
+                                                    FROM public.hipparcos AS hipp 
+                                                        INNER JOIN gaiadr2.hipparcos2_best_neighbour 
+                                                            ON hipp.hip = hipparcos2_best_neighbour.original_ext_source_id 
+                                                    GROUP BY hipp.ccdm {0}
+                                               ) AS num_binary ON num_binary.ccdm = hipp.ccdm
+    
+                                WHERE hipp.ccdm is not null
+    
+                                ORDER BY hipp.ccdm asc""".format(filter_missing_data)
         output_df = self.gaia_query_to_pandas(query, **kwargs)
         if save_to_parquet:
             self.data_save_parquet(output_df, "hipp_binaries")
