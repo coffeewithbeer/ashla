@@ -1,4 +1,4 @@
-from astroquery.gaia import Gaia, GaiaClass
+from astroquery.gaia import GaiaClass
 from ashla import utils
 import ashla.data_access.config as cnf
 
@@ -22,8 +22,8 @@ class GaiaDataAccess(GaiaClass):
         job = j1.get_results()
         return job
 
-    def gaia_query_to_pandas(self, query, parquet_output_name=None):
-        job = self.get_gaia_job(query)
+    def gaia_query_to_pandas(self, query, parquet_output_name=None, **kwargs):
+        job = self.get_gaia_job(query, **kwargs)
         gaia_data = job.to_pandas()
         if parquet_output_name is not None:
             self.data_save_parquet(gaia_data, output_file_name=parquet_output_name)
@@ -36,7 +36,40 @@ class GaiaDataAccess(GaiaClass):
         gaia_data = query_gaia_to_pandas(query)
         self.data_save_parquet(gaia_data, output_file_name)
 
-    def gaia_get_dr2_initial_data(self, save_to_parquet=False):
+    def gaia_get_dr2_initial_data(self, save_to_parquet=False, **kwargs):
+        """
+
+        Function to run a query showing the first wide binary pair in the paper.
+
+        Args:
+            save_to_parquet (bool): Save results to Parquet format.
+
+        Kwargs:
+            output_file (str): optional, default None
+                file name where the results are saved if dumpToFile is True.
+                If this parameter is not provided, the jobid is used instead
+            output_format (str): optional, default 'votable'
+                results format
+            verbose (bool): optional, default 'False'
+                flag to display information about the process
+            dump_to_file (bool): optional, default 'False'
+                if True, the results are saved in a file instead of using memory
+            background (bool): optional, default 'False'
+                when the job is executed in asynchronous mode, this flag specifies
+                whether the execution will wait until results are available
+            upload_resource (str): optional, default None
+                resource to be uploaded to UPLOAD_SCHEMA
+            upload_table_name (str): optional, default None
+                resource temporary table name associated to the uploaded resource.
+                This argument is required if upload_resource is provided.
+            autorun (boolean): optional, default True
+                if 'True', sets 'phase' parameter to 'RUN',
+                so the framework can start the job.
+
+        Returns:
+            Pandas.DataFrame: Output of the query.
+
+        """
         query = r"""SELECT TOP 500 gaia_source.source_id,gaia_source.ra,gaia_source.ra_error,gaia_source.dec,
                         gaia_source.dec_error,gaia_source.parallax,gaia_source.parallax_error,gaia_source.phot_g_mean_mag,
                         gaia_source.bp_rp,gaia_source.radial_velocity,gaia_source.radial_velocity_error,
@@ -47,9 +80,74 @@ class GaiaDataAccess(GaiaClass):
                     WHERE (gaiadr2.gaia_source.source_id=4722135642226356736 OR 
                         gaiadr2.gaia_source.source_id=4722111590409480064)"""
 
-        output_df = self.gaia_query_to_pandas(query)
+        output_df = self.gaia_query_to_pandas(query, **kwargs)
         if save_to_parquet:
             self.data_save_parquet(output_df, "initial_dr2_data")
+        return output_df
+
+    def gaia_get_hipp_binaries(self, save_to_parquet, only_show_stars_with_both_stars_in_data=True, **kwargs):
+        """
+
+        Function to run a query which joins Gaia DR2 and Hipparcos, and filters to stars known to be in a binary system.
+            Additionally, there is a filter to only show stars where at least 2 stars in the binary system exists in
+            both Hipparcos and Gaia DR2.
+
+        Args:
+            save_to_parquet (bool): Save results to Parquet format.
+            only_show_stars_with_both_stars_in_data (bool): Only show stars where at least 2 stars in the binary system exists in
+                both Hipparcos and Gaia DR2.
+
+        Kwargs:
+            output_file (str): optional, default None
+                file name where the results are saved if dumpToFile is True.
+                If this parameter is not provided, the jobid is used instead
+            output_format (str): optional, default 'votable'
+                results format
+            verbose (bool): optional, default 'False'
+                flag to display information about the process
+            dump_to_file (bool): optional, default 'False'
+                if True, the results are saved in a file instead of using memory
+            background (bool): optional, default 'False'
+                when the job is executed in asynchronous mode, this flag specifies
+                whether the execution will wait until results are available
+            upload_resource (str): optional, default None
+                resource to be uploaded to UPLOAD_SCHEMA
+            upload_table_name (str): optional, default None
+                resource temporary table name associated to the uploaded resource.
+                This argument is required if upload_resource is provided.
+            autorun (boolean): optional, default True
+                if 'True', sets 'phase' parameter to 'RUN',
+                so the framework can start the job.
+
+        Returns:
+            Pandas.DataFrame: Output of the query.
+
+        """
+        filter_missing_data = " HAVING count(*) > 1 " if only_show_stars_with_both_stars_in_data else ""
+        query = r"""SELECT gaia_source.source_id,gaia_source.ra,gaia_source.ra_error,gaia_source.dec,
+                        gaia_source.dec_error,gaia_source.parallax,gaia_source.parallax_error,gaia_source.phot_g_mean_mag,
+                        gaia_source.bp_rp,gaia_source.radial_velocity,gaia_source.radial_velocity_error,
+                        gaia_source.phot_variable_flag,gaia_source.teff_val,gaia_source.a_g_val, 
+                        gaia_source.pmra as proper_motion_ra, gaia_source.pmra_error as proper_motion_ra_error, 
+                        gaia_source.pmdec as proper_motion_dec, gaia_source.pmdec_error as proper_motion_dec_error,
+						hipp.ccdm, hipp.n_ccdm AS CCDM_History, hipparcos2_best_neighbour.angular_distance AS angular_distance_between_hipp_gaia,
+						num_binary.num_ccdm AS num_stars_in_binary_w_data_available
+
+                    FROM gaiadr2.gaia_source
+LEFT JOIN gaiadr2.hipparcos2_best_neighbour ON gaia_source.source_id = hipparcos2_best_neighbour.source_id
+LEFT JOIN public.hipparcos_newreduction AS hipp2 ON hipp2.hip = hipparcos2_best_neighbour.original_ext_source_id
+LEFT JOIN public.hipparcos AS hipp ON hipp2.hip = hipp.hip
+INNER JOIN (SELECT hipp.ccdm, count(*) AS num_ccdm FROM public.hipparcos AS hipp 
+			INNER JOIN gaiadr2.hipparcos2_best_neighbour ON hipp.hip = hipparcos2_best_neighbour.original_ext_source_id 
+			GROUP BY hipp.ccdm {0}
+		   ) AS num_binary ON num_binary.ccdm = hipp.ccdm
+
+WHERE hipp.ccdm is not null
+
+ORDER BY hipp.ccdm asc""".format(filter_missing_data)
+        output_df = self.gaia_query_to_pandas(query, **kwargs)
+        if save_to_parquet:
+            self.data_save_parquet(output_df, "hipp_binaries")
         return output_df
 
 

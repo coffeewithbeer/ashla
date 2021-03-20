@@ -64,6 +64,9 @@ and save as a Parquet file named gaia_data.parquet.gzip using the parquet_output
 
     data = gaia_cnxn.query_gaia_to_pandas(query, parquet_output_name='gaia_data')
     
+You can additionally pass any arguments which get passed to the Astroquery Gaia launch_job_async or launch_job 
+function. For example, you can get an output Votable table using:
 
+    data = gaia_cnxn.query_gaia_to_pandas(query, dump_to_file=True, output_format='votable')
 
-    
+You can additionally use output_format= ‘votable_plain’, ‘fits’, ‘csv’ or ‘json
