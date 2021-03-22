@@ -1,9 +1,16 @@
 from astroquery.gaia import GaiaClass
 from ashla import utils
 import ashla.data_access.config as cnf
+from ashla.data_access.binary_data import BinaryStarDataFrame
 
 
 class GaiaDataAccess(GaiaClass):
+    """
+
+    Proxy for the Gaia Query (TAP) class. Uses a login class for login details, and contains easier to use functions
+    to get data.
+
+    """
     def __init__(self, login_config=None):
         super(GaiaDataAccess, self).__init__()
         self.login_config = login_config
@@ -22,12 +29,68 @@ class GaiaDataAccess(GaiaClass):
         job = j1.get_results()
         return job
 
+    def get_old_job_data(self, jobid, return_binary_inst=True, parquet_output_name=None):
+        """
+
+        Function to grab the data from an old asyncronous TAP job. Saves the time for running the job. Great for large
+        amounts of data.
+
+        Args:
+            jobid (str): Job ID.
+            return_binary_inst (bool): If True, returns BinaryStarDataFrame DataFrame proxy object, otherwise table obj.
+            parquet_output_name (str): Optional, default None. If set, will save a Parquet file with this name (as a
+            prefix).
+
+        Returns:
+            BinaryStarDataFrame: If return_binary_inst is True or Table. Contains the table data from the job.
+
+        """
+        j1 = self.load_async_job(jobid)
+        job = j1.get_results()
+        dta_pd = job.to_pandas()
+        if parquet_output_name is not None:
+            self.data_save_parquet(dta_pd, output_file_name=parquet_output_name)
+        if return_binary_inst:
+            return BinaryStarDataFrame(dta_pd)
+        return job
+
     def gaia_query_to_pandas(self, query, parquet_output_name=None, **kwargs):
+        """
+
+        Args:
+            query (str): Query to send to the Gaia Archive.
+            parquet_output_name (str): Optional, default None. If set, will output a Parquet file of this name prefix.
+
+        Kwargs:
+            output_file (str): optional, default None
+                file name where the results are saved if dumpToFile is True.
+                If this parameter is not provided, the jobid is used instead
+            output_format (str): optional, default 'votable'
+                results format
+            verbose (bool): optional, default 'False'
+                flag to display information about the process
+            dump_to_file (bool): optional, default 'False'
+                if True, the results are saved in a file instead of using memory
+            background (bool): optional, default 'False'
+                when the job is executed in asynchronous mode, this flag specifies
+                whether the execution will wait until results are available
+            upload_resource (str): optional, default None
+                resource to be uploaded to UPLOAD_SCHEMA
+            upload_table_name (str): optional, default None
+                resource temporary table name associated to the uploaded resource.
+                This argument is required if upload_resource is provided.
+            autorun (boolean): optional, default True
+                if 'True', sets 'phase' parameter to 'RUN',
+                so the framework can start the job.
+
+        Returns:
+
+        """
         job = self.get_gaia_job(query, **kwargs)
         gaia_data = job.to_pandas()
         if parquet_output_name is not None:
             self.data_save_parquet(gaia_data, output_file_name=parquet_output_name)
-        return gaia_data
+        return BinaryStarDataFrame(gaia_data)
 
     def data_save_parquet(self, data, output_file_name):
         data.to_parquet("{0}.parquet.gzip".format(output_file_name), compression='gzip')
@@ -125,7 +188,8 @@ class GaiaDataAccess(GaiaClass):
         """
         filter_missing_data = " HAVING count(*) > 1 " if only_show_stars_with_both_stars_in_data else ""
         query = r"""SELECT gaia_source.source_id,gaia_source.ra,gaia_source.ra_error,gaia_source.dec,
-                        gaia_source.dec_error,gaia_source.parallax,gaia_source.parallax_error,gaia_source.phot_g_mean_mag,
+                        gaia_source.dec_error,gaia_source.parallax,gaia_source.parallax_error,hipp2.plx as hipp_parallax, hipp2.e_plx as hipp_error_parallax,
+                        gaia_source.phot_g_mean_mag,gaia_source.parallax_over_error,
                         gaia_source.bp_rp,gaia_source.radial_velocity,gaia_source.radial_velocity_error,
                         gaia_source.phot_variable_flag,gaia_source.teff_val,gaia_source.a_g_val, 
                         gaia_source.pmra as proper_motion_ra, gaia_source.pmra_error as proper_motion_ra_error, 
@@ -147,7 +211,9 @@ class GaiaDataAccess(GaiaClass):
                                                     GROUP BY hipp.ccdm {0}
                                                ) AS num_binary ON num_binary.ccdm = hipp.ccdm
     
-                                WHERE hipp.ccdm is not null
+                                WHERE hipp.ccdm is not null and hipp.nsys =2
+                                and hipp.ncomp =1 and hipparcos2_best_neighbour.gaia_astrometric_params=5 
+ 
     
                                 ORDER BY hipp.ccdm asc""".format(filter_missing_data)
         output_df = self.gaia_query_to_pandas(query, **kwargs)
@@ -185,15 +251,6 @@ def run_gaia_query(query, login_config=None):
     job = gaia_cls.get_gaia_job(query)
     return job
 
-
-def add_calculated_cols(gaia_df):
-    gaia_df['dist_pc'] = float(1) / gaia_df['parallax']
-    gaia_df['cart_x'], gaia_df['cart_y'], gaia_df['cart_z'] = utils.ra_dec_dist_to_cartesian(gaia_df['ra'],
-                                                                                             gaia_df['dec'],
-                                                                                             gaia_df['dist_pc'])
-    gaia_df['rgb_colour'] = "rgb" + gaia_df['bp_g'].apply(utils.bv2rgb).astype(str)
-    gaia_df['dot_size'] = utils.dot_size_from_mag(gaia_df['phot_g_mean_mag'])
-    return gaia_df
 
 
 def query_gaia_to_pandas(query, login_cnf=None):
