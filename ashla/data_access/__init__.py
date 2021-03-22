@@ -213,7 +213,7 @@ class GaiaDataAccess(GaiaClass):
     
                                 WHERE hipp.ccdm is not null and hipp.nsys =2
                                 and hipp.ncomp =1 and hipparcos2_best_neighbour.gaia_astrometric_params=5 
- 
+                                and ABS(hipp2.plx - gaia_source.parallax) <= (hipp2.e_plx + gaia_source.parallax_error)
     
                                 ORDER BY hipp.ccdm asc""".format(filter_missing_data)
         output_df = self.gaia_query_to_pandas(query, **kwargs)

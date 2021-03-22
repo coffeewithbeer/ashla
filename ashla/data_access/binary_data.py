@@ -51,7 +51,7 @@ if __name__ == '__main__':
     import ashla.data_access as da
 
     gaia_cnxn = da.GaiaDataAccess(r'C:\Users\zacha\Documents\ashla\ashla\data_access\login_conf_zplummer.ini')
-    # output_data = gaia_cnxn.gaia_get_hipp_binaries(save_to_parquet=True, only_show_stars_with_both_stars_in_data=True)
-    output_data = gaia_cnxn.load_async_job('1616446549863O')
+    output_data = gaia_cnxn.gaia_get_hipp_binaries(save_to_parquet=True, only_show_stars_with_both_stars_in_data=True)
+    #output_data = gaia_cnxn.load_async_job('1616446549863O')
     # data_bin = BinaryData(output_data)
     print(output_data)
