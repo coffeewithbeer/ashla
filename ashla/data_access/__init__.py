@@ -187,6 +187,7 @@ class GaiaDataAccess(GaiaClass):
 
         """
         filter_missing_data = " HAVING count(*) > 1 " if only_show_stars_with_both_stars_in_data else ""
+        where_clause = " WHERE ABS(hipp2.plx - gaia2.parallax) <= (hipp2.e_plx + gaia2.parallax_error) and gaia2.parallax_over_error > 5" if only_show_stars_with_both_stars_in_data else ""
         query = r"""SELECT gaia_source.source_id,gaia_source.ra,gaia_source.ra_error,gaia_source.dec,
                         gaia_source.dec_error,gaia_source.parallax,gaia_source.parallax_error,hipp2.plx as hipp_parallax, hipp2.e_plx as hipp_error_parallax,
                         gaia_source.phot_g_mean_mag,gaia_source.parallax_over_error,
@@ -206,16 +207,23 @@ class GaiaDataAccess(GaiaClass):
                                 LEFT JOIN public.hipparcos AS hipp ON hipp2.hip = hipp.hip
                                     INNER JOIN (SELECT hipp.ccdm, count(*) AS num_ccdm 
                                                     FROM public.hipparcos AS hipp 
-                                                        INNER JOIN gaiadr2.hipparcos2_best_neighbour 
-                                                            ON hipp.hip = hipparcos2_best_neighbour.original_ext_source_id 
-                                                    GROUP BY hipp.ccdm {0}
+                                                        INNER JOIN public.hipparcos_newreduction AS hipp2 on hipp.hip = hipp2.hip
+                                                            INNER JOIN gaiadr2.hipparcos2_best_neighbour 
+                                                                    ON hipp2.hip = hipparcos2_best_neighbour.original_ext_source_id
+                                                                INNER JOIN gaiadr2.gaia_source AS gaia2 
+                                                                    on hipparcos2_best_neighbour.source_id = gaia2.source_id 
+                                                    {0} 
+                                                    GROUP BY hipp.ccdm {1}
                                                ) AS num_binary ON num_binary.ccdm = hipp.ccdm
     
-                                WHERE hipp.ccdm is not null and hipp.nsys =2
-                                and hipp.ncomp =1 and hipparcos2_best_neighbour.gaia_astrometric_params=5 
+                                WHERE hipp.ccdm is not null and
+                                hipp.nsys >=2 and
+                                -- hipp.ncomp =1 and 
+                                hipparcos2_best_neighbour.gaia_astrometric_params=5 
                                 and ABS(hipp2.plx - gaia_source.parallax) <= (hipp2.e_plx + gaia_source.parallax_error)
+                                and gaia_source.parallax_over_error > 5 
     
-                                ORDER BY hipp.ccdm asc""".format(filter_missing_data)
+                                ORDER BY hipp.ccdm asc""".format(where_clause,filter_missing_data)
         output_df = self.gaia_query_to_pandas(query, **kwargs)
         if save_to_parquet:
             self.data_save_parquet(output_df, "hipp_binaries")
