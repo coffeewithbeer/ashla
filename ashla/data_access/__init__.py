@@ -11,6 +11,7 @@ class GaiaDataAccess(GaiaClass):
     to get data.
 
     """
+
     def __init__(self, login_config=None):
         super(GaiaDataAccess, self).__init__()
         self.login_config = login_config
@@ -148,7 +149,34 @@ class GaiaDataAccess(GaiaClass):
             self.data_save_parquet(output_df, "initial_dr2_data")
         return output_df
 
-    def gaia_get_hipp_binaries(self, save_to_parquet, only_show_stars_with_both_stars_in_data=True, **kwargs):
+    def gaia_get_pairs_of_close_stars(self, save_to_parquet=False, **kwargs):
+        query = r"""SELECT * FROM (
+SELECT g1.source_id as id1, g1.ra as ra1, g1.ra_error as ra1_err, g1.dec_error as dec1_err, g1.dec as dec1, 1000.0 / g1.parallax as d1, (g1.parallax_error / g1.parallax)*(1000.0 / g1.parallax) as d1_err, g1.parallax_error as plx1_err,
+	g1.pmra as pmra1, g1.pmdec as pmdec1, g1.pmra_error as pmra1_err, g1.pmdec_error as pmdec1_err, g2.parallax_error as plx2_err, g1.dr2_radial_velocity as rad_vel1, g1.dr2_radial_velocity_error as rad_vel1_err, 
+	g2.source_id as id2, g2.ra as ra2, g2.dec as dec2, g2.ra_error as ra2_err, g2.dec_error as dec2_err, 1000.0 / g2.parallax as d2,  (g2.parallax_error / g2.parallax)*(1000.0 / g2.parallax) as d2_err, 
+	g2.pmra as pmra2, g2.pmdec as pmdec2, g2.pmra_error as pmra2_err, g2.pmdec_error as pmdec2_err,g2.dr2_radial_velocity as rad_vel2, g2.dr2_radial_velocity_error as rad_vel2_err,
+	
+	-- Distance between stars
+  sqrt(ABS(power((1000.0 / g1.parallax + 1000.0 / g2.parallax), 2) * (1 - (sin(g1.dec * 2*pi()/360.0) * sin(g2.dec * 2*pi()/360.0) + (cos(g1.dec * 2*pi()/360.0) * cos(g2.dec * 2*pi()/360.0) * cos((g1.ra * 2*pi()/360.0) - (g2.ra * 2*pi()/360.0))))) / 2)) as dist
+FROM gaiaedr3.gaia_source as g1, gaiaedr3.gaia_source as g2 
+	-- avoids duplicates
+	where g1.source_id < g2.source_id and
+	g1.parallax is not null and g2.parallax is not null and g1.parallax_over_error > 5 and g2.parallax_over_error > 5 
+	and g1.pmdec is not null and g1.pmra is not null and g1.dr2_radial_velocity is not null 
+	and g2.pmra is not null and g2.pmdec is not null and g2.dr2_radial_velocity is not null
+	-- only pick combinations of stars in plane of sight in sky so we use proper motions ( parallax's around the same, giving a 20% breathing space for errors)
+	and ABS(g1.parallax - g2.parallax) <= SQRT(power(g1.parallax_error, 2) + power(g2.parallax_error,2))*1.2
+  --and (g1.source_id=4722135642226356736 and g2.source_id=4722111590409480064) or (g2.source_id=4722135642226356736 and g1.source_id=4722111590409480064) 
+	) main 
+
+where main.dist <= 1.0
+"""
+        output_df = self.gaia_query_to_pandas(query, **kwargs)
+        if save_to_parquet:
+            self.data_save_parquet(output_df, "gaia_close_star_pairs")
+        return output_df
+
+    def gaia_get_hipp_binaries(self, save_to_parquet=False, only_show_stars_with_both_stars_in_data=True, **kwargs):
         """
 
         Function to run a query which joins Gaia DR2 and Hipparcos, and filters to stars known to be in a binary system.
@@ -223,7 +251,7 @@ class GaiaDataAccess(GaiaClass):
                                 and ABS(hipp2.plx - gaia_source.parallax) <= (hipp2.e_plx + gaia_source.parallax_error)
                                 and gaia_source.parallax_over_error > 5 
     
-                                ORDER BY hipp.ccdm asc""".format(where_clause,filter_missing_data)
+                                ORDER BY hipp.ccdm asc""".format(where_clause, filter_missing_data)
         output_df = self.gaia_query_to_pandas(query, **kwargs)
         if save_to_parquet:
             self.data_save_parquet(output_df, "hipp_binaries")
@@ -258,7 +286,6 @@ def run_gaia_query(query, login_config=None):
     gaia_cls = GaiaDataAccess(login_config=login_config)
     job = gaia_cls.get_gaia_job(query)
     return job
-
 
 
 def query_gaia_to_pandas(query, login_cnf=None):
